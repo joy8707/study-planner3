@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人讀書計劃管理系統</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) for Excel Import/Export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* 根字體設為 18px (全站字體放大 2pt) */
+        html {
+            font-size: 18px;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-full flex flex-col antialiased">
+
+    <!-- Header 頂部導覽區 (適應手機直式畫面) -->
+    <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 py-3 sm:px-6 sm:py-4">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+                
+                <!-- Title 區塊 (手機端不擠壓、自動縮放與斷行) -->
+                <div class="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-start text-center sm:text-left">
+                    <div class="p-2.5 bg-indigo-500/50 rounded-xl shadow-inner shrink-0">
+                        <i class="fa-solid fa-book-bookmark text-2xl text-indigo-100"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight leading-tight break-words">
+                            讀書計劃管理系統
+                        </h1>
+                        <p class="text-xs text-indigo-200 font-normal">高效學習 ‧ 每日輪迴進度規劃</p>
+                    </div>
+                </div>
+
+                <!-- 頁籤切換按鈕 (手機端滿寬且均分) -->
+                <nav class="flex bg-indigo-700/80 p-1 rounded-xl shadow-inner w-full sm:w-auto shrink-0" aria-label="Tabs">
+                    <button id="tab-btn-plan" onclick="switchTab('plan')" class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-white bg-indigo-900 shadow">
+                        <i class="fa-regular fa-calendar-check mr-1.5"></i>今日計劃
+                    </button>
+                    <button id="tab-btn-data" onclick="switchTab('data')" class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-indigo-200 hover:text-white">
+                        <i class="fa-solid fa-file-excel mr-1.5"></i>資料來源 / Excel
+                    </button>
+                </nav>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區域 -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-6 sm:px-6 space-y-6">
+
+        <!-- ==================== 頁籤 1: 今日讀書計劃 ==================== -->
+        <section id="view-plan" class="space-y-6">
+            
+            <!-- 日期導覽卡片 -->
+            <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row items-center justify-between gap-4">
+                
+                <!-- 日期選擇與前後按鈕 -->
+                <div class="flex items-center justify-between w-full md:w-auto gap-2">
+                    <button onclick="changeDate(-1)" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition flex items-center gap-1 shadow-sm">
+                        <i class="fa-solid fa-chevron-left text-xs"></i>
+                        <span>前一天</span>
+                    </button>
+
+                    <input type="date" id="current-date-input" onchange="onDateInputChange(this.value)" class="px-3 py-2 border border-slate-300 rounded-xl font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition text-sm">
+
+                    <button onclick="changeDate(1)" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl font-bold text-sm transition flex items-center gap-1 shadow-sm">
+                        <span>後一天</span>
+                        <i class="fa-solid fa-chevron-right text-xs"></i>
+                    </button>
+                </div>
+
+                <!-- 快捷回到今天按鈕 -->
+                <button onclick="goToToday()" class="w-full md:w-auto px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition border border-indigo-100 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-rotate-left"></i> 回到基準日 (2026/10/24)
+                </button>
+
+                <!-- 日期標題資訊 (YYYY/MM/DD（星期幾）｜班別：XX) -->
+                <div id="date-info-badge" class="w-full md:w-auto px-4 py-2 bg-indigo-50/80 rounded-xl border border-indigo-100 text-center md:text-right">
+                    <span class="text-xs text-indigo-400 font-semibold block">當前讀書班別</span>
+                    <span id="date-info-text" class="text-base sm:text-lg font-bold text-indigo-900">載入中...</span>
+                </div>
+
+            </div>
+
+            <!-- 時段計劃卡片列表 -->
+            <div id="slots-container" class="space-y-4">
+                <!-- 由 JavaScript 動態繪製 6 個時段卡片 -->
+            </div>
+
+        </section>
+
+
+        <!-- ==================== 頁籤 2: 資料來源與 Excel 匯入 ==================== -->
+        <section id="view-data" class="hidden space-y-6">
+            
+            <!-- Excel 檔案操作卡片 -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-import text-indigo-600"></i>
+                        匯入與管理課表資料
+                    </h2>
+                    <p class="text-slate-500 text-sm mt-1">
+                        上傳包含 12 個班別 (A1~D) 對應 6 個時段的 Excel (.xlsx, .xls) 或 CSV 檔案，即可快速更換讀書計畫內容。
+                    </p>
+                </div>
+
+                <!-- 檔案拖曳與上傳區 -->
+                <div id="drop-zone" onclick="document.getElementById('excel-file-input').click()" class="border-2 border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50 hover:bg-indigo-50/30 rounded-2xl p-8 text-center transition cursor-pointer relative group">
+                    <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelUpload(event)">
+                    <div class="space-y-3 pointer-events-none">
+                        <div class="w-16 h-16 mx-auto bg-indigo-100 group-hover:bg-indigo-200 text-indigo-600 rounded-full flex items-center justify-center text-2xl transition">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-700 text-base">拖曳 Excel 檔案至此，或點擊選擇檔案</p>
+                            <p class="text-xs text-slate-400 mt-1">支援 .xlsx, .xls, .csv 檔案格式</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 按鈕列：下載範本 & 恢復預設 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <button onclick="downloadExcelTemplate()" class="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>下載 Excel 範本 (.xlsx)</span>
+                    </button>
+                    <button onclick="resetToDefaultData()" class="w-full bg-slate-600 hover:bg-slate-700 active:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>恢復系統預設計劃</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 當前資料庫內容預覽表格 -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-table text-indigo-600"></i>
+                        目前班別計畫預覽 (12天輪迴)
+                    </h3>
+                    <span class="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md">系統預覽</span>
+                </div>
+
+                <div id="data-preview-container" class="overflow-x-auto rounded-xl border border-slate-200">
+                    <!-- 表格動態繪製 -->
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto">
+        個人讀書計劃管理系統 ‧ 資料皆自動儲存於本機瀏覽器 (localStorage)
+    </footer>
+
+    <!-- ==================== JavaScript 應用程式邏輯 ==================== -->
+    <script>
+        // 1. 固定時段定義 (按題目需求 6 個時段)
+        const TIME_SLOTS = [
+            "09:00-11:00",
+            "13:30-15:00",
+            "15:00-17:30",
+            "17:30-19:30",
+            "19:30-21:00",
+            "21:30-22:30" // 題目要求的時段
+        ];
+
+        // 2. 輪迴邏輯定義
+        const WEEKDAYS = ["禮拜日", "禮拜一", "禮拜二", "禮拜三", "禮拜四", "禮拜五", "禮拜六"];
+        const SHIFTS = ["A1", "A2", "A3", "D", "B1", "B2", "B3", "D", "C1", "C2", "C3", "D"];
+
+        // 基準日: 2026/10/24 為 「禮拜六 A1」 (SHIFTS index 0)
+        const BASE_DATE = new Date(2026, 9, 24); // 月份 0-indexed，9 代表 10月
+
+        // 應用程式狀態 (State)
+        let currentDate = new Date(2026, 9, 24); // 預設初始為 2026/10/24
+        let userDatabase = {};                   // 各班別 6 個時段的內容
+        let userLogs = {};                       // 每日打卡紀錄: { "YYYY-MM-DD": { slotIndex: { status: "completed"|"uncompleted"|"other", customText: "" } } }
+
+        // 初始化載入
+        window.onload = function() {
+            loadFromLocalStorage();
+            updateDateUI();
+            renderPlanner();
+            renderDataPreview();
+            setupDragAndDrop();
+        };
+
+        // 切換頁籤 Tab
+        function switchTab(tabName) {
+            const planSec = document.getElementById('view-plan');
+            const dataSec = document.getElementById('view-data');
+            const btnPlan = document.getElementById('tab-btn-plan');
+            const btnData = document.getElementById('tab-btn-data');
+
+            if (tabName === 'plan') {
+                planSec.classList.remove('hidden');
+                dataSec.classList.add('hidden');
+                btnPlan.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-white bg-indigo-900 shadow";
+                btnData.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-indigo-200 hover:text-white";
+                renderPlanner();
+            } else {
+                planSec.classList.add('hidden');
+                dataSec.classList.remove('hidden');
+                btnData.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-white bg-indigo-900 shadow";
+                btnPlan.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all duration-200 text-indigo-200 hover:text-white";
+                renderDataPreview();
+            }
+        }
+
+        // 日期計算邏輯 (取得 YYYY-MM-DD 鍵值)
+        function getDateKey(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        // 計算指定日期的班別 (以 2026/10/24 禮拜六 A1 為基準)
+        function getShiftForDate(targetDate) {
+            // 清除時分秒僅計算日數差
+            const d1 = new Date(BASE_DATE.getFullYear(), BASE_DATE.getMonth(), BASE_DATE.getDate());
+            const d2 = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+            
+            const diffTime = d2.getTime() - d1.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+            let shiftIndex = (diffDays % SHIFTS.length);
+            if (shiftIndex < 0) {
+                shiftIndex += SHIFTS.length;
+            }
+            return SHIFTS[shiftIndex];
+        }
+
+        // 日期切換操作
+        function changeDate(days) {
+            currentDate.setDate(currentDate.getDate() + days);
+            updateDateUI();
+            renderPlanner();
+        }
+
+        function goToToday() {
+            currentDate = new Date(2026, 9, 24);
+            updateDateUI();
+            renderPlanner();
+        }
+
+        function onDateInputChange(dateVal) {
+            if (!dateVal) return;
+            const parts = dateVal.split('-');
+            currentDate = new Date(parts[0], parts[1] - 1, parts[2]);
+            updateDateUI();
+            renderPlanner();
+        }
+
+        function updateDateUI() {
+            document.getElementById('current-date-input').value = getDateKey(currentDate);
+        }
+
+        // 渲染今日讀書計劃頁面
+        function renderPlanner() {
+            const dateKey = getDateKey(currentDate);
+            const shift = getShiftForDate(currentDate);
+            const weekdayStr = WEEKDAYS[currentDate.getDay()];
+            
+            const y = currentDate.getFullYear();
+            const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const d = String(currentDate.getDate()).padStart(2, '0');
+
+            // 格式：YYYY/MM/DD（星期幾）｜班別：XX
+            document.getElementById('date-info-text').innerText = `${y}/${m}/${d}（${weekdayStr}）｜ 班別：${shift}`;
+
+            const container = document.getElementById('slots-container');
+            container.innerHTML = '';
+
+            if (!userLogs[dateKey]) {
+                userLogs[dateKey] = {};
+            }
+
+            TIME_SLOTS.forEach((slotTime, idx) => {
+                // 取得該班別對應時段任務
+                const taskContent = (userDatabase[shift] && userDatabase[shift][idx] !== undefined)
+                    ? userDatabase[shift][idx]
+                    : `[${shift}] 課業研讀事項`;
+
+                // 判斷是否標示為不可利用
+                const isUnavailable = taskContent.trim() === "不可利用";
+
+                // 取得當前日期的紀錄
+                const log = userLogs[dateKey][idx] || { status: 'uncompleted', customText: '' };
+
+                // 建立卡片元件
+                const card = document.createElement('div');
+                card.className = `p-4 sm:p-5 rounded-2xl border transition shadow-sm ${
+                    isUnavailable 
+                        ? 'bg-slate-100 border-slate-300 opacity-80' 
+                        : 'bg-white border-slate-200/90 hover:border-indigo-200'
+                }`;
+
+                card.innerHTML = `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        
+                        <!-- 左側：時段與任務內容 -->
+                        <div class="space-y-1.5 flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg text-xs font-bold tracking-wide">
+                                    <i class="fa-regular fa-clock mr-1"></i>${slotTime}
+                                </span>
+                                ${isUnavailable ? `
+                                    <span class="px-2.5 py-0.5 bg-slate-200 text-slate-700 rounded-md text-xs font-bold">
+                                        <i class="fa-solid fa-ban mr-1"></i>不可利用
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <p class="text-base sm:text-lg font-bold ${isUnavailable ? 'text-slate-500 line-through' : 'text-slate-800'} break-words">
+                                ${taskContent}
+                            </p>
+                        </div>
+
+                        <!-- 右側：狀態選擇下拉選單 -->
+                        <div class="w-full sm:w-auto flex items-center gap-2 justify-end shrink-0">
+                            <select onchange="updateLogStatus('${dateKey}', ${idx}, this.value)" class="w-full sm:w-auto px-3.5 py-2 border border-slate-300 rounded-xl text-sm font-semibold bg-white text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm cursor-pointer">
+                                <option value="uncompleted" ${log.status === 'uncompleted' ? 'selected' : ''}>⏳ 未完成</option>
+                                <option value="completed" ${log.status === 'completed' ? 'selected' : ''}>✅ 已完成</option>
+                                <option value="other" ${log.status === 'other' ? 'selected' : ''}>✏️ 其他</option>
+                            </select>
+                        </div>
+
+                    </div>
+
+                    <!-- 選項為「其他」時展開之單行文字輸入框 -->
+                    <div id="custom-input-box-${dateKey}-${idx}" class="mt-3 pt-3 border-t border-slate-100 ${log.status === 'other' ? '' : 'hidden'}">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-pen-to-square text-indigo-500 text-sm"></i>
+                            <input type="text" 
+                                value="${escapeHtml(log.customText || '')}" 
+                                placeholder="請自由輸入備註內容..." 
+                                oninput="updateLogCustomText('${dateKey}', ${idx}, this.value)"
+                                class="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-50 focus:bg-white transition">
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // 更新打卡狀態與備註
+        function updateLogStatus(dateKey, idx, status) {
+            if (!userLogs[dateKey]) userLogs[dateKey] = {};
+            if (!userLogs[dateKey][idx]) userLogs[dateKey][idx] = { status: 'uncompleted', customText: '' };
+
+            userLogs[dateKey][idx].status = status;
+
+            const inputBox = document.getElementById(`custom-input-box-${dateKey}-${idx}`);
+            if (status === 'other') {
+                inputBox.classList.remove('hidden');
+            } else {
+                inputBox.classList.add('hidden');
+            }
+            saveToLocalStorage();
+        }
+
+        function updateLogCustomText(dateKey, idx, text) {
+            if (!userLogs[dateKey]) userLogs[dateKey] = {};
+            if (!userLogs[dateKey][idx]) userLogs[dateKey][idx] = { status: 'other', customText: '' };
+
+            userLogs[dateKey][idx].customText = text;
+            saveToLocalStorage();
+        }
+
+        // 預設計劃資料庫初始化 (12 個班別)
+        function initDefaultDatabase() {
+            userDatabase = {};
+            SHIFTS.forEach(shift => {
+                if (shift === "D") {
+                    // 模擬休息/彈性日
+                    userDatabase[shift] = [
+                        `[${shift}] 彈性讀書與複習`,
+                        `[${shift}] 自由閱讀/休養`,
+                        `不可利用`,
+                        `[${shift}] 弱點補強`,
+                        `[${shift}] 週進度總檢討`,
+                        `不可利用`
+                    ];
+                } else {
+                    userDatabase[shift] = [
+                        `[${shift}] 國文 / 英文核心字彙與閱讀`,
+                        `[${shift}] 專業科目 (一) 章節觀念建立`,
+                        `[${shift}] 專業科目 (一) 歷屆試題演練`,
+                        `[${shift}] 專業科目 (二) 重點精讀`,
+                        `[${shift}] 錯題檢討與筆記整理`,
+                        `[${shift}] 當日讀書總結與預習`
+                    ];
+                }
+            });
+        }
+
+        // 本地儲存 (LocalStorage)
+        function saveToLocalStorage() {
+            localStorage.setItem('study_planner_db_v2', JSON.stringify(userDatabase));
+            localStorage.setItem('study_planner_logs_v2', JSON.stringify(userLogs));
+        }
+
+        function loadFromLocalStorage() {
+            const savedDb = localStorage.getItem('study_planner_db_v2');
+            const savedLogs = localStorage.getItem('study_planner_logs_v2');
+
+            if (savedDb) {
+                try {
+                    userDatabase = JSON.parse(savedDb);
+                } catch(e) {
+                    initDefaultDatabase();
+                }
+            } else {
+                initDefaultDatabase();
+            }
+
+            if (savedLogs) {
+                try {
+                    userLogs = JSON.parse(savedLogs);
+                } catch(e) {
+                    userLogs = {};
+                }
+            }
+        }
+
+        function resetToDefaultData() {
+            if (confirm("確定要將計畫資料恢復為系統預設值嗎？自訂的課表將會被覆蓋。")) {
+                initDefaultDatabase();
+                saveToLocalStorage();
+                renderPlanner();
+                renderDataPreview();
+                alert("已成功恢復預設計劃！");
+            }
+        }
+
+        // 資料預覽表格繪製
+        function renderDataPreview() {
+            const container = document.getElementById('data-preview-container');
+            
+            let html = `
+                <table class="w-full text-left border-collapse bg-white text-xs sm:text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
+                            <th class="p-3 border-r border-slate-200 whitespace-nowrap">班別</th>
+                            ${TIME_SLOTS.map(s => `<th class="p-3 border-r border-slate-200 min-w-[140px] whitespace-nowrap">${s}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            SHIFTS.forEach((shift, sIdx) => {
+                const tasks = userDatabase[shift] || Array(6).fill("");
+                html += `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+                        <td class="p-3 font-bold text-indigo-700 bg-slate-50/50 border-r border-slate-200 whitespace-nowrap">${shift}</td>
+                        ${tasks.map(t => {
+                            const isUn = t.trim() === "不可利用";
+                            return `<td class="p-3 border-r border-slate-100 ${isUn ? 'text-slate-400 font-semibold bg-slate-50' : 'text-slate-700'}">${escapeHtml(t)}</td>`;
+                        }).join('')}
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        // Excel 處理：下載範本
+        function downloadExcelTemplate() {
+            let aoa = [
+                ["班別", ...TIME_SLOTS]
+            ];
+
+            SHIFTS.forEach(shift => {
+                const tasks = userDatabase[shift] || Array(6).fill("");
+                aoa.push([shift, ...tasks]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            
+            // 設定欄寬
+            ws['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 25 }];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "讀書計劃資料");
+            XLSX.writeFile(wb, "讀書計劃課表範本.xlsx");
+        }
+
+        // Excel 處理：上傳解析
+        function handleExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            processExcelFile(file);
+        }
+
+        function processExcelFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (!json || json.length < 2) {
+                        alert("⚠️ Excel 檔案內容空白或格式不符。");
+                        return;
+                    }
+
+                    let importedCount = 0;
+                    let tempDb = { ...userDatabase };
+
+                    for (let i = 1; i < json.length; i++) {
+                        const row = json[i];
+                        if (row && row.length >= 1) {
+                            const shift = String(row[0]).trim();
+                            if (SHIFTS.includes(shift)) {
+                                const slot1 = row[1] !== undefined ? String(row[1]).trim() : "";
+                                const slot2 = row[2] !== undefined ? String(row[2]).trim() : "";
+                                const slot3 = row[3] !== undefined ? String(row[3]).trim() : "";
+                                const slot4 = row[4] !== undefined ? String(row[4]).trim() : "";
+                                const slot5 = row[5] !== undefined ? String(row[5]).trim() : "";
+                                const slot6 = row[6] !== undefined ? String(row[6]).trim() : "";
+
+                                tempDb[shift] = [slot1, slot2, slot3, slot4, slot5, slot6];
+                                importedCount++;
+                            }
+                        }
+                    }
+
+                    if (importedCount > 0) {
+                        userDatabase = tempDb;
+                        saveToLocalStorage();
+                        renderDataPreview();
+                        renderPlanner();
+                        alert(`🎉 成功匯入 ${importedCount} 個班別的讀書計畫！`);
+                    } else {
+                        alert("⚠️ 未找到匹配的班別 (A1, A2, A3, D, B1...)，請使用「下載 Excel 範本」確認格式。");
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    alert("❌ 讀取 Excel 檔案時發生錯誤，請確認檔案是否損壞。");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 拖曳上傳支援
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('border-indigo-600', 'bg-indigo-50/50');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('border-indigo-600', 'bg-indigo-50/50');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    processExcelFile(files[0]);
+                }
+            }, false);
+        }
+
+        // 工具函式：HTML 轉義字元防護
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
